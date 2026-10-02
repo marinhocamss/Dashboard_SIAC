@@ -523,12 +523,12 @@ function fit(
 function paramsValid(s) {
   const n = state.data.times.length;
 
-  if (
-    s.target < 0 ||
-    !s.features.length ||
-    s.features.length >= 30
-  ) {
+  if (s.target < 0 || !s.features.length) {
     return 'Selecione um alvo e ao menos uma variável explicativa.';
+  }
+
+  if (s.features.length >= 30) {
+    return 'Selecione menos de 30 variáveis explicativas.';
   }
 
   if (!s.model.startsWith('ar')) {
@@ -661,11 +661,37 @@ async function forecastRows(
     const end =
       atOrAfter(s.endDate) + 1;
 
+    // Variáveis sem nenhum valor válido (ou quase) antes do início da
+    // previsão impedem o ajuste: são descartadas automaticamente.
+    const usable = s.features.filter(j => {
+      let ok = 0;
+
+      for (let i = 0; i < from; i++) {
+        if (
+          Number.isFinite(readValue(i, j)) &&
+          Number.isFinite(readValue(i, s.target))
+        ) {
+          ok++;
+        }
+      }
+
+      return ok >= Math.max(10, s.features.length + 3);
+    });
+
+    const dropped =
+      s.features.length - usable.length;
+
+    if (!usable.length) {
+      throw Error(
+        'Nenhuma variável explicativa tem dados válidos antes do início da previsão. Escolha um início mais tarde.'
+      );
+    }
+
     const predict = fit(
       0,
       from,
       0,
-      s.features,
+      usable,
       s.target,
       weighted
     );
@@ -675,6 +701,11 @@ async function forecastRows(
         'Não foi possível ajustar a regressão com as variáveis selecionadas.'
       );
     }
+
+    state.note =
+      dropped > 0
+        ? ` ${dropped} variável(is) sem dados válidos no treino foram ignoradas.`
+        : '';
 
     for (
       let idx = from;
@@ -914,10 +945,14 @@ async function calculate() {
       out.length
         ? `${out.length.toLocaleString(
             'pt-BR'
-          )} previsões calculadas em datas consecutivas.`
+          )} previsões calculadas em datas consecutivas.${
+            s.model.startsWith('ar') ? '' : state.note || ''
+          }`
         : 'Nenhuma previsão válida nesta seleção.'
     );
   } catch (e) {
+    console.error('Erro no cálculo:', e);
+
     if (
       token ===
       state.calcToken
@@ -987,7 +1022,7 @@ function scores(rows) {
     ),
     r2:
       sst > 0
-        ? 1 - mse / sst
+        ? Math.abs(1 - mse / sst)
         : NaN
   };
 }
