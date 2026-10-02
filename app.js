@@ -911,7 +911,7 @@ async function calculate() {
 }
 
 /* =========================================================
-   MÉTRICAS
+   MÉTRICAS CORRIGIDAS (MAE, RMSE e R² real)
    ========================================================= */
 
 function scores(rows) {
@@ -952,6 +952,8 @@ function scores(rows) {
       0
     );
 
+  const sse = mse;
+
   return {
     mae: mae / n,
     rmse: Math.sqrt(
@@ -959,7 +961,7 @@ function scores(rows) {
     ),
     r2:
       sst > 0
-        ? 1 - (mse / sst) // Removido o Math.abs para refletir o R² real
+        ? 1 - (sse / sst) // R² real, sem Math.abs forçado
         : NaN
   };
 }
@@ -2905,7 +2907,7 @@ async function main() {
 $$('.tab').forEach(
   b =>
     b.onclick = () => {
-      $$('.tab').forEach(         t =>           t.classList.toggle(             'active',             t === b           )       );        $$
+      $$('.tab').forEach(          t =>             t.classList.toggle(               'active',               t === b             )       );$$
 ('.view').forEach(
         v =>
           v.classList.toggle(
@@ -2971,7 +2973,7 @@ $('#model').onchange =
     calculate();
   };
 
-$('#all-features').onclick =   () => {     $$('#features input').forEach(
+$('#all-features').onclick =    () => {       $$('#features input').forEach(
       x =>
         (x.checked = true)
     );
@@ -2984,7 +2986,7 @@ $('#all-features').onclick =   () => {     $$('#features input').forEach(
     calculate();
   };
 
-$('#no-features').onclick =   () => {     $$('#features input').forEach(
+$('#no-features').onclick =    () => {       $$('#features input').forEach(
       x =>
         (x.checked = false)
     );
