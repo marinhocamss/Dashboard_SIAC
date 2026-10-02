@@ -959,7 +959,7 @@ function scores(rows) {
     ),
     r2:
       sst > 0
-        ? Math.abs(1 - mse / sst)
+        ? 1 - (mse / sst) // Removido o Math.abs para refletir o R² real
         : NaN
   };
 }
