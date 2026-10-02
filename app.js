@@ -340,7 +340,7 @@ function solve(A, b) {
 }
 
 /* =========================================================
-   REGRESSÃO
+   REGRESSÃO (Alinhada com o Python)
    ========================================================= */
 
 function fit(
@@ -364,155 +364,94 @@ function fit(
     return null;
   }
 
-  const mean = new Float64Array(p);
-  const variance = new Float64Array(p);
-
-  for (
-    let i = origin;
-    i < end - lag;
-    i++
-  ) {
-    for (let j = 0; j < p; j++) {
-      const v = read(
-        i,
-        features[j]
-      );
-
-      if (Number.isFinite(v)) {
-        mean[j] += v;
-        variance[j] += v * v;
-      }
-    }
-  }
-
-  for (let j = 0; j < p; j++) {
-    mean[j] /= n;
-
-    variance[j] = Math.sqrt(
-      Math.max(
-        variance[j] / n -
-          mean[j] ** 2,
-        1e-16
-      )
-    );
-  }
-
   const dim = p + 1;
-
-  const A = new Float64Array(
-    dim * dim
-  );
-
-  const b = new Float64Array(dim);
-
-  const x = new Float64Array(dim);
-
+  const X_rows = [];
+  const y_vals = [];
   let valid = 0;
 
-  for (
-    let i = origin;
-    i < end - lag;
-    i++
-  ) {
-    const y = read(
-      i + lag,
-      target
-    );
-
-    if (!Number.isFinite(y)) {
-      continue;
-    }
-
-    x[0] = 1;
+  for (let i = origin; i < end - lag; i++) {
+    const y = read(i + lag, target);
+    if (!Number.isFinite(y)) continue;
 
     let ok = true;
+    const row = [1]; // Intercepto
 
     for (let j = 0; j < p; j++) {
-      const v = read(
-        i,
-        features[j]
-      );
-
+      const v = read(i, features[j]);
       if (!Number.isFinite(v)) {
         ok = false;
         break;
       }
-
-      x[j + 1] =
-        (v - mean[j]) /
-        variance[j];
+      row.push(v);
     }
 
     if (!ok) continue;
 
-    const w = weighted
-      ? (i - origin) /
-        Math.max(1, n - 1)
-      : 1;
-
-    for (let a = 0; a < dim; a++) {
-      b[a] +=
-        w * x[a] * y;
-
-      for (let c = 0; c <= a; c++) {
-        A[a * dim + c] +=
-          w * x[a] * x[c];
-      }
-    }
-
+    X_rows.push(row);
+    y_vals.push(y);
     valid++;
   }
 
-  if (
-    valid <
-    Math.max(10, p + 3)
-  ) {
+  if (valid < Math.max(10, p + 3)) {
     return null;
   }
 
-  for (let a = 0; a < dim; a++) {
-    for (
-      let c = a + 1;
-      c < dim;
-      c++
-    ) {
-      A[a * dim + c] =
-        A[c * dim + a];
+  const numSamples = X_rows.length;
+  const X = new Float64Array(numSamples * dim);
+  const Y = new Float64Array(numSamples);
+
+  for (let i = 0; i < numSamples; i++) {
+    Y[i] = y_vals[i];
+    for (let j = 0; j < dim; j++) {
+      X[i * dim + j] = X_rows[i][j];
     }
   }
 
-  const ridge =
-    1e-9 *
-    Math.max(1, A[0]);
+  let Xw = new Float64Array(X);
+  let Yw = new Float64Array(Y);
 
-  for (let a = 1; a < dim; a++) {
-    A[a * dim + a] += ridge;
+  if (weighted) {
+    for (let i = 0; i < numSamples; i++) {
+      const w = numSamples > 1 ? i / (numSamples - 1) : 1;
+      Yw[i] *= w;
+      for (let j = 0; j < dim; j++) {
+        Xw[i * dim + j] *= w;
+      }
+    }
   }
 
-  const coef = solve(A, b);
+  const M = new Float64Array(dim * dim);
+  const b = new Float64Array(dim);
+
+  for (let i = 0; i < numSamples; i++) {
+    for (let a = 0; a < dim; a++) {
+      b[a] += X[i * dim + a] * Yw[i];
+      for (let c = 0; c < dim; c++) {
+        M[a * dim + c] += X[i * dim + a] * Xw[i * dim + c];
+      }
+    }
+  }
+
+  const coef = solve(M, b);
 
   if (!coef) return null;
 
   return idx => {
-    let y = coef[0];
-
+    const rowPred = [1];
     for (let j = 0; j < p; j++) {
-      const v = read(
-        idx,
-        features[j]
-      );
-
+      const v = read(idx, features[j]);
       if (!Number.isFinite(v)) {
         return NaN;
       }
-
-      y +=
-        coef[j + 1] *
-        ((v - mean[j]) /
-          variance[j]);
+      rowPred.push(v);
     }
 
-    return y;
+    let yPred = 0;
+    for (let j = 0; j < dim; j++) {
+      yPred += rowPred[j] * coef[j];
+    }
+
+    return yPred;
   };
 }
 
@@ -661,8 +600,6 @@ async function forecastRows(
     const end =
       atOrAfter(s.endDate) + 1;
 
-    // Variáveis sem nenhum valor válido (ou quase) antes do início da
-    // previsão impedem o ajuste: são descartadas automaticamente.
     const usable = s.features.filter(j => {
       let ok = 0;
 
@@ -2868,13 +2805,6 @@ async function main() {
       'Carregando dados…'
     );
 
-    /*
-      IMPORTANTE:
-      Os caminhos abaixo são RELATIVOS.
-      Isso funciona no GitHub Pages em:
-      /Dashboard_SIAC/
-    */
-
     const metaResponse =
       await fetch(
         'assets/meta.json',
@@ -2975,15 +2905,8 @@ async function main() {
 $$('.tab').forEach(
   b =>
     b.onclick = () => {
-      $$('.tab').forEach(
-        t =>
-          t.classList.toggle(
-            'active',
-            t === b
-          )
-      );
-
-      $$('.view').forEach(
+      $$('.tab').forEach(         t =>           t.classList.toggle(             'active',             t === b           )       );        $$
+('.view').forEach(
         v =>
           v.classList.toggle(
             'active',
@@ -3016,7 +2939,7 @@ $$('.tab').forEach(
         drawForecast();
       }
     }
-  );
+);
 
 $('#target').onchange =
   () => {
@@ -3048,9 +2971,7 @@ $('#model').onchange =
     calculate();
   };
 
-$('#all-features').onclick =
-  () => {
-    $$('#features input').forEach(
+$('#all-features').onclick =   () => {     $$('#features input').forEach(
       x =>
         (x.checked = true)
     );
@@ -3063,9 +2984,7 @@ $('#all-features').onclick =
     calculate();
   };
 
-$('#no-features').onclick =
-  () => {
-    $$('#features input').forEach(
+$('#no-features').onclick =   () => {     $$('#features input').forEach(
       x =>
         (x.checked = false)
     );
