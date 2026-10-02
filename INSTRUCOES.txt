@@ -1,0 +1,22 @@
+DASHBOARD — MODELAGEM DE SÉRIES TEMPORAIS
+
+CONTEÚDO
+  dist/                 Dashboard pronto para abrir no navegador.
+  dist/assets/          Dados binários necessários ao dashboard.
+  dados_originais/      CSVs enviados, preservados para análise.
+  notebooks/            Notebooks de referência enviados.
+  README.md             Métodos e estrutura dos dados.
+
+COMO ABRIR NO COMPUTADOR
+1. Extraia todo o ZIP para uma pasta.
+2. Abra um terminal nessa pasta (a que contém dist/).
+3. No Windows, execute:
+      py -m http.server 8765 --directory dist
+   No Linux/WSL, execute:
+      python3 -m http.server 8765 --directory dist
+4. Abra http://localhost:8765 no navegador.
+5. Para parar, pressione Ctrl+C no terminal.
+
+Não abra dist/index.html diretamente com dois cliques: o navegador bloqueia
+a leitura dos arquivos de dados quando a página usa o protocolo file://.
+O servidor é local; não são necessários pacotes Python adicionais.
